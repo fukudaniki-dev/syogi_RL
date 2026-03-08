@@ -1,0 +1,17 @@
+services:
+  dlshogi:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: dlshogi-inference
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../app:/workspace/app
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
