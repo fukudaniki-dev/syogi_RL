@@ -1,0 +1,248 @@
+/* ====================================================
+   将棋 UI スタイルシート
+   ==================================================== */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+  background: #f5f0e8;
+  color: #333;
+  padding: 16px;
+}
+
+h1 {
+  text-align: center;
+  font-size: 1.4rem;
+  margin-bottom: 12px;
+  letter-spacing: 0.1em;
+}
+
+/* ---- メインレイアウト ---- */
+#main-container {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 16px;
+}
+
+/* ---- 持ち駒エリア ---- */
+.hand-area {
+  width: 120px;
+  background: #e8dcc8;
+  border: 1px solid #b8a888;
+  border-radius: 4px;
+  padding: 8px;
+  min-height: 200px;
+}
+
+.hand-area h3 {
+  font-size: 0.85rem;
+  margin-bottom: 6px;
+  text-align: center;
+  color: #555;
+}
+
+.hand-pieces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.hand-piece-btn {
+  width: 44px;
+  height: 44px;
+  font-size: 0.9rem;
+  background: #fff8f0;
+  border: 1px solid #a08060;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.1;
+  transition: background 0.15s;
+}
+
+.hand-piece-btn:hover {
+  background: #ffe8c0;
+}
+
+.hand-piece-btn.selected {
+  background: #ffd080;
+  border-color: #c06020;
+  box-shadow: 0 0 0 2px #f0a030;
+}
+
+.hand-piece-btn .piece-name {
+  font-size: 1rem;
+}
+
+.hand-piece-btn .piece-count {
+  font-size: 0.65rem;
+  color: #666;
+}
+
+/* ---- 盤面エリア ---- */
+#board-area {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+#col-labels {
+  display: flex;
+  padding-left: 20px; /* row-labels の幅分 */
+}
+
+#col-labels span {
+  width: 60px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+#canvas-row {
+  display: flex;
+  align-items: stretch;
+}
+
+#row-labels {
+  display: flex;
+  flex-direction: column;
+  width: 20px;
+}
+
+#row-labels span {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: #666;
+}
+
+#shogi-board {
+  border: 2px solid #6b4f2a;
+  cursor: pointer;
+  background: #e8c87a;
+  display: block;
+}
+
+/* ---- Value ゲージ ---- */
+#value-section {
+  margin: 16px auto;
+  width: 580px;
+  text-align: center;
+}
+
+#value-label {
+  font-size: 0.85rem;
+  color: #555;
+  margin-bottom: 4px;
+}
+
+#value-gauge-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+#value-black-label,
+#value-white-label {
+  font-size: 0.8rem;
+  width: 30px;
+  color: #333;
+}
+
+#value-gauge-bg {
+  position: relative;
+  width: 480px;
+  height: 24px;
+  background: linear-gradient(to right, #1a1a1a 0%, #888 50%, #fff 100%);
+  border: 1px solid #888;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#value-gauge-bar {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 100%;
+  width: 0;
+  background: rgba(255, 180, 0, 0.6);
+  transition: left 0.3s, width 0.3s;
+}
+
+#value-center-line {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 100%;
+  background: #f00;
+  transform: translateX(-50%);
+}
+
+#value-text {
+  margin-top: 4px;
+  font-size: 1rem;
+  font-weight: bold;
+}
+
+/* ---- コントロール ---- */
+#controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: center;
+  margin: 12px 0;
+}
+
+#btn-new-game {
+  padding: 8px 20px;
+  font-size: 0.95rem;
+  background: #5a7a3a;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#btn-new-game:hover {
+  background: #3a5a1a;
+}
+
+#turn-label {
+  font-size: 0.95rem;
+  font-weight: bold;
+}
+
+#status-msg {
+  font-size: 0.85rem;
+  color: #c00;
+}
+
+/* ---- ヒートマップ凡例 ---- */
+#heatmap-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: #555;
+  margin-top: 8px;
+}
+
+#legend-canvas {
+  border: 1px solid #aaa;
+  border-radius: 2px;
+}

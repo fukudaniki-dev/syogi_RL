@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>将棋 UI (dlshogi)</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <h1>将棋 UI</h1>
+
+  <div id="main-container">
+    <!-- 後手 持ち駒 -->
+    <div class="hand-area" id="hand-white">
+      <h3>後手 持ち駒</h3>
+      <div id="hand-white-pieces" class="hand-pieces"></div>
+    </div>
+
+    <!-- 盤面エリア -->
+    <div id="board-area">
+      <!-- 列番号 (9〜1) -->
+      <div id="col-labels">
+        <span></span>
+        <span>9</span><span>8</span><span>7</span><span>6</span>
+        <span>5</span><span>4</span><span>3</span><span>2</span><span>1</span>
+      </div>
+
+      <div id="canvas-row">
+        <!-- 段番号 (一〜九) -->
+        <div id="row-labels">
+          <span>一</span><span>二</span><span>三</span>
+          <span>四</span><span>五</span><span>六</span>
+          <span>七</span><span>八</span><span>九</span>
+        </div>
+        <canvas id="shogi-board" width="540" height="540"></canvas>
+      </div>
+    </div>
+
+    <!-- 先手 持ち駒 -->
+    <div class="hand-area" id="hand-black">
+      <h3>先手 持ち駒</h3>
+      <div id="hand-black-pieces" class="hand-pieces"></div>
+    </div>
+  </div>
+
+  <!-- Value ゲージ -->
+  <div id="value-section">
+    <div id="value-label">評価値 (先手視点)</div>
+    <div id="value-gauge-container">
+      <div id="value-black-label">先手</div>
+      <div id="value-gauge-bg">
+        <div id="value-gauge-bar"></div>
+        <div id="value-center-line"></div>
+      </div>
+      <div id="value-white-label">後手</div>
+    </div>
+    <div id="value-text">0.00</div>
+  </div>
+
+  <!-- 操作パネル -->
+  <div id="controls">
+    <label>あなたの手番:
+      <select id="human-color-select">
+        <option value="black">先手（下手）</option>
+        <option value="white">後手（上手）</option>
+      </select>
+    </label>
+    <button id="btn-new-game">新規対局</button>
+    <span id="turn-label">手番: 先手</span>
+    <span id="ai-thinking" style="display:none; color:#c00; font-weight:bold;">AI思考中...</span>
+    <span id="status-msg"></span>
+  </div>
+
+  <!-- ヒートマップ凡例 -->
+  <div id="heatmap-legend">
+    <span>Policy ヒートマップ:</span>
+    <canvas id="legend-canvas" width="200" height="20"></canvas>
+    <span>低</span><span>高</span>
+  </div>
+
+  <script src="/static/board.js"></script>
+</body>
+</html>
