@@ -2,16 +2,25 @@
 dlshogi 形式の特徴量エンコーダー
 
 C++ cppshogi の make_input_features に対応する Python 実装。
-利き計算（FEATURES1の14-30ch）は省略し、駒位置と持ち駒のみエンコードする。
 
 座標系:
   sq = file_idx * 9 + rank_idx
   file_idx = 8 - col   (col=0 が9筋→file_idx=8、col=8 が1筋→file_idx=0)
-  rank_idx = row        (row=0 が9段目=盤面上部→rank_idx=0)
+  rank_idx = row        (row=0 が1段目=盤面上部→rank_idx=0)
 
 テンソル形状: (batch, channels, 9, 9)
   dim2 = file_idx = 8 - col
   dim3 = rank_idx = row
+
+FEATURES1 チャンネル構造 (62ch = 2 × 31ch):
+  先手視点 (ch 0-30):
+    0-13  : 自駒の位置 (駒種別)
+    14-27 : 自駒の利き (駒種別の攻撃可能マス)
+    28-30 : 自駒の利き数カウント (1以上/2以上/3以上)
+  後手視点 (ch 31-61):
+    31-44 : 相手駒の位置
+    45-58 : 相手駒の利き
+    59-61 : 相手駒の利き数カウント
 """
 
 import numpy as np
@@ -50,6 +59,63 @@ def _is_black_piece(piece: str) -> bool:
     return piece.isupper()
 
 
+def _set_attack_planes(
+    f1: np.ndarray,
+    board_2d: List[List[str]],
+    is_black: bool,
+) -> None:
+    """
+    FEATURES1 の利きチャンネル (ch 14-27, 28-30, 45-58, 59-61) を埋める。
+
+    cppshogi make_input_features の攻撃チャンネル仕様:
+      ch = group_offset + PIECETYPE_NUM + piece_idx : 駒種別の利き先マス
+      ch = group_offset + PIECETYPE_NUM*2 + k       : 利き数カウント (k=0,1,2 で 1以上/2以上/3以上)
+    """
+    from app.shogi_engine import _piece_attacks
+
+    # [color_slot][fi][ri] で攻撃数を集計 (color_slot: 0=自駒, 1=相手駒)
+    attack_count = [
+        [[0] * 9 for _ in range(9)],
+        [[0] * 9 for _ in range(9)],
+    ]
+
+    for row in range(9):
+        for col in range(9):
+            piece = board_2d[row][col]
+            if not piece:
+                continue
+            piece_idx = PIECE_TO_IDX.get(piece, -1)
+            if piece_idx < 0:
+                continue
+
+            piece_is_black = _is_black_piece(piece)
+            is_own = (piece_is_black == is_black)
+            color_slot = 0 if is_own else 1
+            ch_base = FEATURES1_GROUP * color_slot  # 0 (自駒) or 31 (相手駒)
+
+            for (tr, tc) in _piece_attacks(piece, row, col, board_2d):
+                # 攻撃先マスを現在の手番視点の座標に変換
+                if is_black:
+                    fi, ri = 8 - tc, tr
+                else:
+                    fi, ri = tc, 8 - tr
+
+                # 駒種別の利きチャンネル (ch 14-27 or 45-58)
+                f1[0, ch_base + PIECETYPE_NUM + piece_idx, fi, ri] = 1.0
+
+                # 利き数カウントを蓄積
+                attack_count[color_slot][fi][ri] += 1
+
+    # 利き数カウントチャンネル (ch 28-30 or 59-61)
+    for color_slot in range(2):
+        ch_base = FEATURES1_GROUP * color_slot
+        for fi in range(9):
+            for ri in range(9):
+                cnt = attack_count[color_slot][fi][ri]
+                for k in range(min(cnt, MAX_ATTACK_NUM)):
+                    f1[0, ch_base + PIECETYPE_NUM * 2 + k, fi, ri] = 1.0
+
+
 def encode_features(
     board_2d: List[List[str]],
     hands: Dict[str, Dict[str, int]],
@@ -84,7 +150,7 @@ def encode_features(
     f2 = np.zeros((1, f2_num, 9, 9), dtype=np.float32)
 
     # ------------------------------------------------------------------ #
-    # FEATURES1: 駒の位置 (利き情報は省略)
+    # FEATURES1: 駒の位置 (ch 0-13, 31-44)
     # ------------------------------------------------------------------ #
     for row in range(9):
         for col in range(9):
@@ -99,11 +165,9 @@ def encode_features(
             is_own = (piece_is_black == is_black)
 
             if is_black:
-                # 先手視点: file_idx = 8-col, rank_idx = row
                 fi = 8 - col
                 ri = row
             else:
-                # 後手視点: 盤面180度回転
                 fi = col
                 ri = 8 - row
 
@@ -112,24 +176,27 @@ def encode_features(
             f1[0, ch_offset + piece_idx, fi, ri] = 1.0
 
     # ------------------------------------------------------------------ #
+    # FEATURES1: 利きチャンネル (ch 14-27, 28-30, 45-58, 59-61)
+    # ------------------------------------------------------------------ #
+    _set_attack_planes(f1, board_2d, is_black)
+
+    # ------------------------------------------------------------------ #
     # FEATURES2: 持ち駒
     # ------------------------------------------------------------------ #
     cur_key = "black" if is_black else "white"
     opp_key = "white" if is_black else "black"
-    cur_order = [p for p, _ in HAND_TYPES]        # 大文字 (先手表記)
-    opp_order = [p.lower() for p, _ in HAND_TYPES] # 小文字 (後手表記)
+    cur_order = [p for p, _ in HAND_TYPES]
+    opp_order = [p.lower() for p, _ in HAND_TYPES]
     if not is_black:
         cur_order, opp_order = opp_order, cur_order
 
     ch = 0
-    # 自分の持ち駒 (c2=0 : channels 0-27)
     for (_, max_count), piece in zip(HAND_TYPES, cur_order):
         count = min(hands[cur_key].get(piece, 0), max_count)
         for i in range(count):
             f2[0, ch + i, :, :] = 1.0
         ch += max_count
 
-    # 相手の持ち駒 (c2=1 : channels 28-55)
     for (_, max_count), piece in zip(HAND_TYPES, opp_order):
         count = min(hands[opp_key].get(piece, 0), max_count)
         for i in range(count):

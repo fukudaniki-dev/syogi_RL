@@ -8,6 +8,10 @@ services:
       - "8000:8000"
     volumes:
       - ../app:/workspace/app
+      - ../models:/workspace/models:ro
+    environment:
+      - DLSHOGI_MODEL_PATH=${DLSHOGI_MODEL_PATH:-}
+      - DLSHOGI_NETWORK=${DLSHOGI_NETWORK:-resnet10_swish}
     deploy:
       resources:
         reservations:
