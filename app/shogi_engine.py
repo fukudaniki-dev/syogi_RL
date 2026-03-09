@@ -215,6 +215,7 @@ class ShogiBoard:
         }
 
         self.turn: str = BLACK
+        self.last_move: Optional[dict] = None  # {"from": [r,c] or None, "to": [r,c]}
 
     # ------------------------------------------------------------------ #
     # 合法手生成
@@ -508,6 +509,7 @@ class ShogiBoard:
         else:
             self.board[tr][tc] = piece
 
+        self.last_move = {"from": [fr, fc], "to": [tr, tc]}
         self.turn = WHITE if self.turn == BLACK else BLACK
         return True
 
@@ -521,6 +523,7 @@ class ShogiBoard:
             return False
         self.hands[self.turn][hand_piece] -= 1
         self.board[tr][tc] = hand_piece if self.turn == WHITE else hand_piece.upper()
+        self.last_move = {"from": None, "to": [tr, tc]}
         self.turn = WHITE if self.turn == BLACK else BLACK
         return True
 
@@ -565,4 +568,5 @@ class ShogiBoard:
             "legal_moves": legal,
             "in_check": in_check,
             "checkmate": checkmate,
+            "last_move": self.last_move,
         }

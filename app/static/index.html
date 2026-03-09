@@ -66,6 +66,10 @@
       </select>
     </label>
     <button id="btn-new-game">新規対局</button>
+    <label id="hint-mode-label">
+      <input type="checkbox" id="hint-mode-checkbox" />
+      ヒントモード
+    </label>
     <span id="turn-label">手番: 先手</span>
     <span id="ai-thinking" style="display:none; color:#c00; font-weight:bold;">AI思考中...</span>
     <span id="status-msg"></span>
@@ -73,11 +77,11 @@
 
   <!-- ヒートマップ凡例 -->
   <div id="heatmap-legend">
-    <span>Policy ヒートマップ:</span>
+    <span>Policy ヒートマップ (ヒントモード時):</span>
     <canvas id="legend-canvas" width="200" height="20"></canvas>
     <span>低</span><span>高</span>
   </div>
 
-  <script src="/static/board.js"></script>
+  <script src="/static/board.js?v=20260310b"></script>
 </body>
 </html>

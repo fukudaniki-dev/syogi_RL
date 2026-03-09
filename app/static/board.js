@@ -44,6 +44,12 @@ let aiThinking = false;    // AI思考中フラグ
 let selectedFrom = null;   // { type: "board", row, col } or { type: "hand", piece }
 let selectedDropPiece = null; // 持ち駒打ち選択中の駒
 
+// ヒントモード: チェックボックスの状態
+function isHintMode() {
+  const cb = document.getElementById("hint-mode-checkbox");
+  return cb ? cb.checked : false;
+}
+
 // ====================================================
 // Canvas 取得
 // ====================================================
@@ -80,16 +86,27 @@ async function apiGet(url) {
 // ====================================================
 
 /**
- * 値 0〜1 を青→赤のグラデーション色へ変換
- * @param {number} v
- * @returns {string} rgba 文字列
+ * 値 0〜1 を透明→黄→赤のグラデーション色へ変換
+ * 低確率は透明に近く、高確率は濃い赤になる
  */
 function heatmapColor(v) {
-  // 青 (0,0,255) → 緑 → 赤 (255,0,0)
   const clamped = Math.max(0, Math.min(1, v));
-  const r = Math.round(255 * clamped);
-  const b = Math.round(255 * (1 - clamped));
-  return `rgba(${r}, 60, ${b}, 0.45)`;
+  // 0→透明, 0.5→黄色, 1→赤
+  let r, g, b, a;
+  if (clamped < 0.5) {
+    const t = clamped * 2;
+    r = Math.round(255 * t);
+    g = Math.round(200 * t);
+    b = 0;
+    a = 0.15 + 0.4 * t;
+  } else {
+    const t = (clamped - 0.5) * 2;
+    r = 255;
+    g = Math.round(200 * (1 - t));
+    b = 0;
+    a = 0.55 + 0.35 * t;
+  }
+  return `rgba(${r}, ${g}, ${b}, ${a.toFixed(2)})`;
 }
 
 // ====================================================
@@ -101,19 +118,13 @@ function drawBoard() {
 
   if (!state) return;
 
-  const { board, hands, turn, policy_heatmap, legal_moves } = state;
+  const { board, legal_moves, last_move, hint_moves } = state;
+  const hint = isHintMode();
+  console.log("[drawBoard] hint=", hint, "hint_moves=", hint_moves);
 
-  // ---- ヒートマップを正規化 ----
-  let maxVal = 0;
-  for (let r = 0; r < 9; r++) {
-    for (let c = 0; c < 9; c++) {
-      if (policy_heatmap && policy_heatmap[r][c] > maxVal) {
-        maxVal = policy_heatmap[r][c];
-      }
-    }
-  }
-
-  // ---- 各マスを描画 ----
+  // ================================================================
+  // LAYER 1: マス背景 + オーバーレイ（直前の手・選択・合法手）
+  // ================================================================
   for (let r = 0; r < 9; r++) {
     for (let c = 0; c < 9; c++) {
       const x = c * CELL;
@@ -123,11 +134,36 @@ function drawBoard() {
       ctx.fillStyle = "#e8c87a";
       ctx.fillRect(x, y, CELL, CELL);
 
-      // ヒートマップ
-      if (policy_heatmap && maxVal > 0) {
-        const v = policy_heatmap[r][c] / maxVal;
-        ctx.fillStyle = heatmapColor(v);
-        ctx.fillRect(x, y, CELL, CELL);
+      // 直前の手ハイライト（常時表示）
+      if (last_move) {
+        if (last_move.from && last_move.from[0] === r && last_move.from[1] === c) {
+          ctx.fillStyle = "rgba(255, 230, 80, 0.35)";
+          ctx.fillRect(x, y, CELL, CELL);
+        }
+        if (last_move.to[0] === r && last_move.to[1] === c) {
+          ctx.fillStyle = "rgba(255, 200, 0, 0.55)";
+          ctx.fillRect(x, y, CELL, CELL);
+        }
+      }
+
+      // ヒントモード: 上位手の移動元(通常手)または移動先(打ち手)をライトブルーで強調
+      if (hint && hint_moves && hint_moves.length > 0) {
+        for (let i = 0; i < hint_moves.length; i++) {
+          const hm = hint_moves[i];
+          const alpha = (0.55 - i * 0.08).toFixed(2);
+          if (hm.from && hm.from[0] === r && hm.from[1] === c) {
+            // 通常手: 移動元を青ハイライト
+            ctx.fillStyle = `rgba(60, 160, 255, ${alpha})`;
+            ctx.fillRect(x, y, CELL, CELL);
+            break;
+          }
+          if (!hm.from && hm.to[0] === r && hm.to[1] === c) {
+            // 打ち手: 移動先を紫ハイライト
+            ctx.fillStyle = `rgba(180, 80, 255, ${alpha})`;
+            ctx.fillRect(x, y, CELL, CELL);
+            break;
+          }
+        }
       }
 
       // 選択ハイライト
@@ -137,7 +173,7 @@ function drawBoard() {
         selectedFrom.row === r &&
         selectedFrom.col === c
       ) {
-        ctx.fillStyle = "rgba(255, 200, 0, 0.5)";
+        ctx.fillStyle = "rgba(255, 200, 0, 0.6)";
         ctx.fillRect(x, y, CELL, CELL);
       }
 
@@ -153,12 +189,7 @@ function drawBoard() {
               m.to[1] === c
             );
           } else {
-            // 持ち駒打ち
-            return (
-              m.from === null &&
-              m.to[0] === r &&
-              m.to[1] === c
-            );
+            return m.from === null && m.to[0] === r && m.to[1] === c;
           }
         });
         if (isLegal) {
@@ -169,7 +200,9 @@ function drawBoard() {
     }
   }
 
-  // ---- グリッド線 ----
+  // ================================================================
+  // LAYER 2: グリッド線
+  // ================================================================
   ctx.strokeStyle = "#6b4f2a";
   ctx.lineWidth = 1;
   for (let i = 0; i <= 9; i++) {
@@ -184,7 +217,9 @@ function drawBoard() {
     ctx.stroke();
   }
 
-  // ---- 駒を描画 ----
+  // ================================================================
+  // LAYER 3: 駒
+  // ================================================================
   for (let r = 0; r < 9; r++) {
     for (let c = 0; c < 9; c++) {
       const piece = board[r][c];
@@ -195,14 +230,11 @@ function drawBoard() {
       const isBlack = piece === piece.toUpperCase() && piece.toUpperCase() !== piece.toLowerCase();
       const isPromoted = piece.startsWith("+");
 
-      // 駒の形（五角形）
       drawPieceShape(ctx, x, y, CELL, isBlack, isPromoted);
 
-      // 文字
       const label = PIECE_LABEL[piece] || piece;
       ctx.save();
       if (!isBlack) {
-        // 後手は 180度回転
         ctx.translate(x + CELL / 2, y + CELL / 2);
         ctx.rotate(Math.PI);
         ctx.translate(-(x + CELL / 2), -(y + CELL / 2));
@@ -215,6 +247,120 @@ function drawBoard() {
       ctx.restore();
     }
   }
+
+  // ================================================================
+  // LAYER 4: 直前の手の枠線（駒の上に重ねる）
+  // ================================================================
+  if (last_move) {
+    ctx.lineWidth = 2.5;
+    if (last_move.from) {
+      const [fr, fc] = last_move.from;
+      ctx.strokeStyle = "rgba(200, 160, 0, 0.7)";
+      ctx.strokeRect(fc * CELL + 1.5, fr * CELL + 1.5, CELL - 3, CELL - 3);
+    }
+    const [tr, tc] = last_move.to;
+    ctx.strokeStyle = "rgba(220, 140, 0, 0.95)";
+    ctx.strokeRect(tc * CELL + 1.5, tr * CELL + 1.5, CELL - 3, CELL - 3);
+  }
+
+  // ================================================================
+  // LAYER 5: ヒントモード矢印（駒の上に重ねる）
+  // ================================================================
+  if (hint && hint_moves && hint_moves.length > 0) {
+    const topScore = hint_moves[0].score || 1;
+    hint_moves.forEach((hm, i) => {
+      const [tr, tc] = hm.to;
+      const alpha = Math.max(0.25, hm.score / topScore);
+      const color = i === 0 ? "#ff2200" : i === 1 ? "#ff7700" : "#ffcc00";
+
+      if (!hm.from) {
+        // 打ち手: 目的地に「駒名＋打」マークを円で表示
+        drawDropHint(tc * CELL + CELL / 2, tr * CELL + CELL / 2, hm.piece, color, alpha);
+      } else {
+        // 通常手: 矢印
+        const [fr, fc] = hm.from;
+        drawHintArrow(
+          fc * CELL + CELL / 2, fr * CELL + CELL / 2,
+          tc * CELL + CELL / 2, tr * CELL + CELL / 2,
+          color, alpha
+        );
+      }
+    });
+  }
+}
+
+/**
+ * ヒント矢印を描画する（移動元 → 移動先）
+ */
+function drawHintArrow(x1, y1, x2, y2, color, alpha) {
+  const headLen = 14;
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  // 矢先が駒に少し刺さらないよう終点を少し手前に
+  const ex = x2 - Math.cos(angle) * 6;
+  const ey = y2 - Math.sin(angle) * 6;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 4;
+  ctx.lineCap = "round";
+
+  // 軸
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(ex, ey);
+  ctx.stroke();
+
+  // 矢頭
+  ctx.beginPath();
+  ctx.moveTo(ex, ey);
+  ctx.lineTo(
+    ex - headLen * Math.cos(angle - Math.PI / 6),
+    ey - headLen * Math.sin(angle - Math.PI / 6)
+  );
+  ctx.lineTo(
+    ex - headLen * Math.cos(angle + Math.PI / 6),
+    ey - headLen * Math.sin(angle + Math.PI / 6)
+  );
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/**
+ * 打ち手ヒントを描画する（目的地に駒名＋「打」を円で表示）
+ */
+function drawDropHint(cx, cy, piece, color, alpha) {
+  const label = HAND_LABEL[piece] || piece;
+  const r = CELL * 0.38;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // 塗り円
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+
+  // 円の枠
+  ctx.strokeStyle = "white";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // テキスト: 上段に駒名、下段に「打」
+  ctx.globalAlpha = Math.min(1.0, alpha * 1.4);
+  ctx.fillStyle = "white";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `bold ${Math.round(CELL * 0.28)}px "Hiragino Kaku Gothic ProN", serif`;
+  ctx.fillText(label, cx, cy - CELL * 0.1);
+  ctx.font = `${Math.round(CELL * 0.22)}px "Hiragino Kaku Gothic ProN", serif`;
+  ctx.fillText("打", cx, cy + CELL * 0.14);
+
+  ctx.restore();
 }
 
 /**
@@ -537,6 +683,10 @@ function drawLegend() {
 // ====================================================
 // ボタン
 // ====================================================
+
+document.getElementById("hint-mode-checkbox").addEventListener("change", () => {
+  drawBoard();
+});
 
 document.getElementById("btn-new-game").addEventListener("click", async () => {
   setStatus("");

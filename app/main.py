@@ -36,31 +36,64 @@ game_mode: dict = {"human_color": "black"}
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=False), name="static")
+
+
+from fastapi import Request
+from fastapi.responses import Response
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class NoCacheMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+app.add_middleware(NoCacheMiddleware)
 
 
 # --------------------------------------------------------------------------- #
 # ヘルパー
 # --------------------------------------------------------------------------- #
 
-def _run_inference(b: ShogiBoard) -> tuple[list[list[float]], float]:
-    """盤面から推論を実行してヒートマップと評価値を返す。"""
+def _run_inference(b: ShogiBoard) -> tuple[list[list[float]], float, list]:
+    """盤面から推論を実行してヒートマップ・評価値・ヒント手を返す。"""
     try:
         f1, f2 = b.to_features()
-        policy, value = engine.infer(f1, f2)
-        heatmap = policy_to_heatmap(policy).tolist()
+        policy_np, value = engine.infer(f1, f2)
+        is_black = (b.turn == "black")
+        heatmap = policy_to_heatmap(policy_np, is_black=is_black).tolist()
+
+        # 合法手をスコア順に並べてヒント用上位5手を返す
+        # policy_np は inference.py で softmax 済みのため直接使用
+        probs = policy_np
+        moves = b.legal_moves()
+        scored = []
+        for m in moves:
+            idx = move_to_policy_idx(m, is_black)
+            if idx is not None and 0 <= idx < len(probs):
+                scored.append((float(probs[idx]), m))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        hint_moves = [
+            {"from": m["from"], "to": m["to"], "piece": m["piece"],
+             "score": round(s, 4)}
+            for s, m in scored[:5]
+        ]
     except Exception as exc:
         logger.warning("Inference failed: %s", exc)
         heatmap = [[0.0] * 9 for _ in range(9)]
         value = 0.0
-    return heatmap, value
+        hint_moves = []
+    return heatmap, value, hint_moves
 
 
 def _board_response(b: ShogiBoard) -> dict:
     d = b.to_dict()
-    heatmap, value = _run_inference(b)
+    heatmap, value, hint_moves = _run_inference(b)
     d["policy_heatmap"] = heatmap
     d["value"] = value
+    d["hint_moves"] = hint_moves
     return d
 
 
