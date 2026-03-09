@@ -46,12 +46,14 @@ unzip dlshogi-wcsc29.zip
 `docker/` ディレクトリに `.env` ファイルを作成します:
 
 ```bash
-# wideresnet10 モデルを使う例
+# wideresnet10 モデルを使う例（WCSC29 zip を展開した場合）
 cat > docker/.env << 'EOF'
-DLSHOGI_MODEL_PATH=/workspace/models/model_rl_val_wideresnet10_selfplay_179
+DLSHOGI_MODEL_PATH=/workspace/models/for_learning/model_rl_val_wideresnet10_selfplay_179
 DLSHOGI_NETWORK=wideresnet10
 EOF
 ```
+
+> **注意**: WCSC29 zip を展開すると `models/for_learning/` 以下にモデルファイルが配置されます。
 
 | 環境変数 | 説明 | デフォルト |
 |---|---|---|
@@ -70,7 +72,10 @@ cd docker
 # 初回ビルド（dlshogi C++ 拡張のビルドで数分かかる）
 docker compose build
 
-# 起動
+# 起動（.env ファイルがある場合）
+docker compose --env-file .env up
+
+# .env なし（ランダム重みで起動）
 docker compose up
 ```
 
